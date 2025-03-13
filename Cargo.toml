@@ -1,0 +1,8 @@
+[package]
+name = "bevy-testing"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bevy = "0.15.3"
+libnoise = "1.1.2"
