@@ -194,7 +194,7 @@ pub fn main() -> GameResult {
 
     // Build the context and event loop
     let (ctx, event_loop) = cb.build()?;
-    let state = MainState::new()?;
+    let state = MainState::new(&ctx)?;
 
     // Run the event loop
     event::run(ctx, event_loop, state)

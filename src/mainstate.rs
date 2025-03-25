@@ -115,6 +115,13 @@ pub struct MainState {
     
     // Whether the introduction screen is active
     show_intro: bool, 
+
+    // Meshes for terrain and effects
+    grass_mesh: Mesh,
+    rock_mesh: Mesh,
+    lightning_mesh: Mesh,
+    bubble_mesh: Mesh,
+    more_bubble_mesh: Mesh,
 }
 
 
@@ -171,7 +178,7 @@ pub struct MainState {
 /// - Iterates through the terrain and inserts non-air cells into the quadtree.
 /// - Resets the dirty flag after rebuilding.
 impl MainState {
-    pub fn new() -> GameResult<MainState> {
+    pub fn new(ctx: &Context) -> GameResult<MainState> {
         let (_stream, stream_handle) = OutputStream::try_default().expect("Failed to create audio output stream");
         // initialize the quadtree covering the entire terrain area
         let qt_boundary = Rect::new(0.0, 0.0, read_terrain_width() as f32 * read_cell_size(), read_terrain_height() as f32 * read_cell_size());
@@ -194,6 +201,40 @@ impl MainState {
             quadtree_dirty: false, // Initialize the flag
             intro_timer: 3.0, // Show the intro for 3 seconds
             show_intro: true, // Start with the introduction screen
+            grass_mesh: Mesh::new_rectangle(
+                ctx,
+                DrawMode::fill(),
+                Rect::new(0.0, 0.0, read_cell_size(), read_cell_size()),
+                Color::from_rgb(111, 171, 51),
+            )?,
+            rock_mesh: Mesh::new_rectangle(
+                ctx,
+                DrawMode::fill(),
+                Rect::new(0.0, 0.0, read_cell_size(), read_cell_size()),
+                Color::from_rgb(123, 108, 113),
+            )?,
+            lightning_mesh: Mesh::new_rectangle(
+                ctx,
+                DrawMode::fill(),
+                Rect::new(-30.0 / 2.0, -10.0 / 2.0, 30.0, 10.0),
+                Color::from_rgb(255, 255, 0),
+            )?,
+            bubble_mesh: Mesh::new_circle(
+                ctx,
+                DrawMode::fill(),
+                ggez::mint::Point2 { x: 0.0, y: 0.0 },
+                5.0,
+                0.5,
+                Color::RED,
+            )?,
+            more_bubble_mesh: Mesh::new_circle(
+                ctx,
+                DrawMode::fill(),
+                ggez::mint::Point2 { x: 0.0, y: 0.0 },
+                5.0,
+                0.5,
+                Color::from_rgb(0, 0, 0),
+            )?,
         };
         s.generate_terrain();
         Ok(s)
@@ -557,30 +598,16 @@ impl EventHandler<GameError> for MainState {
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         let mut canvas = Canvas::from_frame(ctx, Color::WHITE);
 
-        // Pre-create meshes for terrain types at origin (0,0) with size CELL_SIZE x CELL_SIZE.
-        let grass_mesh = Mesh::new_rectangle(
-            ctx,
-            DrawMode::fill(),
-            Rect::new(0.0, 0.0, read_cell_size(), read_cell_size()),
-            Color::from_rgb(111, 171, 51),
-        )?;
-        let rock_mesh = Mesh::new_rectangle(
-            ctx,
-            DrawMode::fill(),
-            Rect::new(0.0, 0.0, read_cell_size(), read_cell_size()),
-            Color::from_rgb(123, 108, 113),
-        )?;
-
+        // We will use pre-create meshes for terrain types
         // Create a SpriteBatch for terrain
-        // (SpriteBatch removed, terrain will be drawn directly below)
         // Draw terrain using the pre-created meshes.
 
         for x in 0..read_terrain_width() {
             for y in 0..read_terrain_height() {
                 let cell = &self.terrain[x][y];
                 let mesh = match cell.material {
-                    Material::Grass => &grass_mesh,
-                    Material::Rock => &rock_mesh,
+                    Material::Grass => &self.grass_mesh, // Directly use self.grass_mesh
+                    Material::Rock => &self.rock_mesh,   // Directly use self.rock_mesh
                     _ => continue,
                 };
                 let dest = ggez::mint::Point2 {
@@ -634,38 +661,13 @@ impl EventHandler<GameError> for MainState {
             return Ok(());
         }
 
-        // Precompute effect meshes for lightning, bubbles and more bubbles.
-        let lightning_rect_w = 30.0;
-        let lightning_rect_h = 10.0;
-        let lightning_mesh = Mesh::new_rectangle(
-            ctx,
-            DrawMode::fill(),
-            Rect::new(-lightning_rect_w / 2.0, -lightning_rect_h / 2.0, lightning_rect_w, lightning_rect_h),
-            Color::from_rgb(255, 255, 0),
-        )?;
-        let bubble_mesh = Mesh::new_circle(
-            ctx,
-            DrawMode::fill(),
-            ggez::mint::Point2 { x: 0.0, y: 0.0 },
-            5.0,
-            0.5,
-            Color::RED,
-        )?;
-        let more_bubble_mesh = Mesh::new_circle(
-            ctx,
-            DrawMode::fill(),
-            ggez::mint::Point2 { x: 0.0, y: 0.0 },
-            5.0,
-            0.5,
-            Color::from_rgb(0, 0, 0),
-        )?;
-
+        // Use precomputed effect meshes for lightning, bubbles and more bubbles.
         // Draw effects using the precomputed meshes.
         for eff in &self.effects {
             match eff.effect_type {
                 EffectType::Lightning => {
                     canvas.draw(
-                        &lightning_mesh,
+                        &self.lightning_mesh,
                         DrawParam::default()
                             .dest(ggez::mint::Point2 { x: eff.position.0, y: eff.position.1 })
                             .rotation(eff.direction),
@@ -673,13 +675,13 @@ impl EventHandler<GameError> for MainState {
                 }
                 EffectType::Bubbles => {
                     canvas.draw(
-                        &bubble_mesh,
+                        &self.bubble_mesh,
                         DrawParam::default().dest(ggez::mint::Point2 { x: eff.position.0, y: eff.position.1 }),
                     );
                 }
                 EffectType::MoreBubbles => {
                     canvas.draw(
-                        &more_bubble_mesh,
+                        &self.more_bubble_mesh,
                         DrawParam::default().dest(ggez::mint::Point2 { x: eff.position.0, y: eff.position.1 }),
                     );
                 }
