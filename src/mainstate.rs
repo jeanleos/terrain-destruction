@@ -11,7 +11,7 @@
 use ggez::{Context, ContextBuilder, GameError, GameResult};
 use ggez::event::{self, EventHandler, MouseButton};
 use ggez::graphics::{
-    Canvas, Color, DrawMode, DrawParam, Mesh, Rect, Text, TextFragment, Drawable,
+    Image, Canvas, Color, DrawMode, DrawParam, Mesh, Rect, Text, TextFragment, Drawable, InstanceArray
 };
 use ggez::audio::{Source, SoundSource};
 use noise::{NoiseFn, Perlin};
@@ -52,6 +52,11 @@ use crate::quadtree;
 /// - `quadtree_dirty`: A flag indicating whether the quadtree needs to be updated.
 /// - `intro_timer`: A timer for displaying the introduction screen.
 /// - `show_intro`: A boolean indicating whether the introduction screen is active.
+/// - `grass_image`: An image representing the grass material.
+/// - `rock_image`: An image representing the rock material.
+/// - `lightning_mesh`: A mesh representing the lightning effect.
+/// - `bubble_mesh`: A mesh representing the bubble effect.
+/// - `more_bubble_mesh`: A mesh representing the more bubbles effect.
 ///
 /// # Methods
 /// - `new() -> GameResult<MainState>`
@@ -117,8 +122,8 @@ pub struct MainState {
     show_intro: bool, 
 
     // Meshes for terrain and effects
-    grass_mesh: Mesh,
-    rock_mesh: Mesh,
+    grass_image: Image,
+    rock_image: Image,
     lightning_mesh: Mesh,
     bubble_mesh: Mesh,
     more_bubble_mesh: Mesh,
@@ -201,18 +206,8 @@ impl MainState {
             quadtree_dirty: false, // Initialize the flag
             intro_timer: 3.0, // Show the intro for 3 seconds
             show_intro: true, // Start with the introduction screen
-            grass_mesh: Mesh::new_rectangle(
-                ctx,
-                DrawMode::fill(),
-                Rect::new(0.0, 0.0, read_cell_size(), read_cell_size()),
-                Color::from_rgb(111, 171, 51),
-            )?,
-            rock_mesh: Mesh::new_rectangle(
-                ctx,
-                DrawMode::fill(),
-                Rect::new(0.0, 0.0, read_cell_size(), read_cell_size()),
-                Color::from_rgb(123, 108, 113),
-            )?,
+            grass_image: Image::from_color(ctx, 5, 5, Some(Color::from_rgb(111, 171, 51))),
+            rock_image: Image::from_color(ctx, 5, 5, Some(Color::from_rgb(123, 108, 113))),
             lightning_mesh: Mesh::new_rectangle(
                 ctx,
                 DrawMode::fill(),
@@ -598,25 +593,32 @@ impl EventHandler<GameError> for MainState {
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         let mut canvas = Canvas::from_frame(ctx, Color::WHITE);
 
-        // We will use pre-create meshes for terrain types
-        // Create a SpriteBatch for terrain
-        // Draw terrain using the pre-created meshes.
+        // Create InstanceArrays for grass and rock
+        let mut grass_instances = InstanceArray::new(ctx, self.grass_image.clone());
+        let mut rock_instances = InstanceArray::new(ctx, self.rock_image.clone());
 
         for x in 0..read_terrain_width() {
             for y in 0..read_terrain_height() {
                 let cell = &self.terrain[x][y];
-                let mesh = match cell.material {
-                    Material::Grass => &self.grass_mesh, // Directly use self.grass_mesh
-                    Material::Rock => &self.rock_mesh,   // Directly use self.rock_mesh
-                    _ => continue,
-                };
                 let dest = ggez::mint::Point2 {
                     x: x as f32 * read_cell_size(),
                     y: y as f32 * read_cell_size(),
                 };
-                canvas.draw(mesh, DrawParam::default().dest(dest));
+
+                match cell.material {
+                    Material::Grass => {
+                        grass_instances.push(DrawParam::default().dest(dest));
+                    }
+                    Material::Rock => {
+                        rock_instances.push(DrawParam::default().dest(dest));
+                    }
+                    _ => continue,
+                }
             }
         }
+
+        grass_instances.draw(&mut canvas, DrawParam::default());
+        rock_instances.draw(&mut canvas, DrawParam::default());
 
         if self.show_intro {
             let mut canvas = Canvas::from_frame(ctx, Color::WHITE); // White background
