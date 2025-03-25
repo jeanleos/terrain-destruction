@@ -49,6 +49,8 @@ One can provide flags to modify some properties in the project.
 4. `--cellsize`: Changes the size of cells (in pixels)
 5. `--seed`: Changes Perlin's seed for terrain generation
 
+Example: `cargo run --release -- --width=500 --height=500`
+
 ## Explored features during this project
 
 - Quadtrees: Faster research in a grid using quadtrees.
