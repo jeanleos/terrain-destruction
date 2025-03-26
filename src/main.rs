@@ -5,7 +5,7 @@
 // Author(s): DIARRA Amara & SERRANO Jean-Léo
 // License: CC BY-NC 4.0
 // Created: March 13, 2025
-// Last modified: March 25, 2025
+// Last modified: March 26, 2025
 // Version: 1.0
 // -----------------------------------------------------------------------------
 
@@ -43,6 +43,9 @@ use crate::effect::{Effect, EffectType};
 mod mainstate;
 use crate::mainstate::MainState;
 
+mod noisetypes;
+use crate::noisetypes::NoiseType;
+
 // Constants
 const MIN_WIDTH: u32 = 500;
 const MIN_HEIGHT: u32 = 300;
@@ -78,9 +81,13 @@ struct Args {
     #[arg(long, default_value_t = 5.0)]
     cellsize: f32,
 
-    /// Seed for Perlin noise
+    /// Seed for noise
     #[arg(long, default_value_t = -1)]
     seed: i64,
+
+    /// Noise type for terrain generation
+    #[arg(long, default_value_t = NoiseType::Perlin)]
+    noise: NoiseType,
 }
 
 // Constants
@@ -92,6 +99,7 @@ lazy_static::lazy_static! {
     static ref TERRAIN_HEIGHT : RwLock<usize> = RwLock::new(100);
     static ref CELL_SIZE: RwLock<f32> = RwLock::new(5.0);
     static ref SEED: RwLock<i64> = RwLock::new(-1);
+    static ref NOISETYPE: RwLock<NoiseType> = RwLock::new(NoiseType::Perlin);
 }
 
 // Read constants
@@ -116,9 +124,12 @@ pub fn read_cell_size() -> f32 {
 pub fn read_seed() -> i64 {
     *SEED.read().unwrap()
 }
+pub fn read_noisetype() -> NoiseType {
+    *NOISETYPE.read().unwrap()
+}
 
 // Update constants
-fn update_constants(width: u32, height: u32, delta: u32, cell_size: f32, seed: i64) {
+fn update_constants(width: u32, height: u32, delta: u32, cell_size: f32, seed: i64, noise: NoiseType) {
     let cell_size = cell_size.max(MIN_SIZE_CELL);
 
     // Adjust width and height to be multiples of cell_size
@@ -140,6 +151,8 @@ fn update_constants(width: u32, height: u32, delta: u32, cell_size: f32, seed: i
     *CELL_SIZE.write().unwrap() = cell_size;
 
     *SEED.write().unwrap() = seed;
+
+    *NOISETYPE.write().unwrap() = noise;
 }
 
 pub fn main() -> GameResult {
@@ -152,6 +165,7 @@ pub fn main() -> GameResult {
     let height;
     let delta;
     let cell_size;
+    let noise;
     let seed = args.seed;
 
     // Check if any arguments are below the minimum values and display a message
@@ -179,9 +193,15 @@ pub fn main() -> GameResult {
     } else {
         cell_size = args.cellsize.max(MIN_SIZE_CELL);
     }
+    noise = if args.noise == NoiseType::Perlin || args.noise == NoiseType::Fbm {
+        args.noise
+    } else {
+        println!("Warning: No provided noise type is not supported. Using Perlin noise instead.");
+        NoiseType::Perlin
+    };
 
     // Update constants
-    update_constants(width, height, delta, cell_size, seed);
+    update_constants(width, height, delta, cell_size, seed, noise);
 
     // Create a new context and event loop
     let cb = ContextBuilder::new("Terrain Destruction", "DIARRA&SERRANO")

@@ -4,7 +4,7 @@
 // Author(s): DIARRA Amara & SERRANO Jean-Léo
 // License: CC BY-NC 4.0
 // Created: March 15, 2025
-// Last modified: March 25, 2025
+// Last modified: March 26, 2025
 // Version: 1.0
 // -----------------------------------------------------------------------------
 
@@ -14,7 +14,7 @@ use ggez::graphics::{
     Image, Canvas, Color, DrawMode, DrawParam, Mesh, Rect, Text, TextFragment, Drawable, InstanceArray
 };
 use ggez::audio::{Source, SoundSource};
-use noise::{NoiseFn, Perlin};
+use noise::{NoiseFn, Perlin, Fbm};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::cell;
 use std::f32::consts::TAU;
@@ -26,11 +26,12 @@ use rand::Rng;
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink};
 use clap::Parser;
 
-use crate::{read_terrain_width, read_terrain_height, read_cell_size, read_screen_width, read_screen_height, read_delta, read_seed};
+use crate::{read_cell_size, read_delta, read_noisetype, read_screen_height, read_screen_width, read_seed, read_terrain_height, read_terrain_width};
 use crate::cell::Cell;
 use crate::effect::{Effect, EffectType};
 use crate::materials::Material;
 use crate::quadtree;
+use crate::noisetypes::NoiseType;
 
 /// The `MainState` struct represents the main game state for the Terrain Destruction game.
 /// It manages the terrain, effects, UI, audio, and game logic.
@@ -92,6 +93,7 @@ pub struct MainState {
     // Terrain generation
     seed: i64,
     perlin: Perlin,
+    fbm: Fbm<Perlin>,
 
     // UI
     input_seed: String,
@@ -193,7 +195,8 @@ impl MainState {
             ]; read_terrain_width()],
             effects: vec![],
             seed: read_seed(),
-            perlin: Perlin::new(0),
+            perlin: Perlin::new(read_seed() as u32),
+            fbm: Fbm::new(read_seed() as u32),
             input_seed: String::new(),
             is_focused_input: false,
             screen_width: read_screen_width(),
@@ -206,8 +209,8 @@ impl MainState {
             quadtree_dirty: false, // Initialize the flag
             intro_timer: 3.0, // Show the intro for 3 seconds
             show_intro: true, // Start with the introduction screen
-            grass_image: Image::from_color(ctx, 5, 5, Some(Color::from_rgb(111, 171, 51))),
-            rock_image: Image::from_color(ctx, 5, 5, Some(Color::from_rgb(123, 108, 113))),
+            grass_image: Image::from_color(ctx, read_cell_size() as u32, read_cell_size() as u32, Some(Color::from_rgb(111, 171, 51))),
+            rock_image: Image::from_color(ctx, read_cell_size() as u32, read_cell_size() as u32, Some(Color::from_rgb(123, 108, 113))),
             lightning_mesh: Mesh::new_rectangle(
                 ctx,
                 DrawMode::fill(),
@@ -218,7 +221,7 @@ impl MainState {
                 ctx,
                 DrawMode::fill(),
                 ggez::mint::Point2 { x: 0.0, y: 0.0 },
-                5.0,
+                read_cell_size(),
                 0.5,
                 Color::RED,
             )?,
@@ -226,7 +229,7 @@ impl MainState {
                 ctx,
                 DrawMode::fill(),
                 ggez::mint::Point2 { x: 0.0, y: 0.0 },
-                5.0,
+                read_cell_size(),
                 0.5,
                 Color::from_rgb(0, 0, 0),
             )?,
@@ -246,7 +249,12 @@ impl MainState {
         };
 
         // Update the seed
-        self.perlin = Perlin::new(actual_seed);
+        if (read_noisetype() == NoiseType::Perlin) {
+            self.perlin = Perlin::new(actual_seed);
+        } else {
+            self.fbm = Fbm::new(actual_seed);
+        }
+        //self.perlin = Fbm::new(actual_seed);//Perlin::new(actual_seed);
     
         // Generate the terrain based on Perlin noise
         let scale = 0.05;
@@ -258,7 +266,11 @@ impl MainState {
             for y in 0..terrain_height {
                 let nx = x as f64 * scale;
                 let ny = y as f64 * scale;
-                let val = self.perlin.get([nx, ny]);
+                let val = match read_noisetype() {
+                    NoiseType::Perlin => self.perlin.get([nx, ny]),
+                    NoiseType::Fbm => self.fbm.get([nx, ny]),
+                    _ => 0.0,
+                };
                 let (mat, dura) = if val < -0.2 {
                     (Material::Air, 0.0)
                 } else if val < 0.2 {

@@ -39,7 +39,7 @@ A procedural terrain destruction simulation game built with [ggez](https://ggez.
 
 ### Execution
 
-`cargo run --release`
+`cargo run --release -- --noise <noise>`
 
 One can provide flags to modify some properties in the project.
 
@@ -47,9 +47,10 @@ One can provide flags to modify some properties in the project.
 2. `--width`: Changes the window's width
 3. `--height`: Changes the window's height
 4. `--cellsize`: Changes the size of cells (in pixels)
-5. `--seed`: Changes Perlin's seed for terrain generation
+5. `--seed`: Changes the current noise's seed for terrain generation
+6. `--noise`: Use a noise generation (perlin, fbm)
 
-Example: `cargo run --release -- --width=500 --height=500`
+Example: `cargo run --release -- --width=500 --height=500 --noise perlin`
 
 ## Explored features during this project
 
@@ -71,6 +72,18 @@ The lightning strike is likewise based on complex mathematical notions which wou
 Besides, we would have wanted to explore more ways to optimise the project to create the preceding effects. For instance, exploring parallelism with rayon was in our schedule but requires refactoring every for loop.
 
 Finally, this project can be easily modified, and new effects could be added.
+
+# Logs
+
+- 13/03: Testing `bevy` library with the ECS system and exploring Perlin noise generation.
+- 15/03: Switching to `ggez` library, creating tiles with colours.
+- 16/03: Command line arguments, creating a window, buttons.
+- 17/03: Making effects.
+- 18/03: Direction for effects, Calculating collisions.
+- 23/03: Bouncing effects.
+- 24/03: Caching, quadtrees, noises.
+- 25/03: Optimisation + InstanceArray
+- 26/03: Added ability to change the default generation noise (Perlin or Fractal Brownian Motion)
 
 ## Authors
 
