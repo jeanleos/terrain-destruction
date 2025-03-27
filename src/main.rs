@@ -119,7 +119,7 @@ pub fn read_delta() -> f32 {
     *FIXED_DELTA.read().unwrap()
 }
 pub fn read_cell_size() -> f32 {
-    *CELL_SIZE.read().unwrap() as f32
+    *CELL_SIZE.read().unwrap()
 }
 pub fn read_seed() -> i64 {
     *SEED.read().unwrap()
@@ -133,8 +133,8 @@ fn update_constants(width: u32, height: u32, delta: u32, cell_size: f32, seed: i
     let cell_size = cell_size.max(MIN_SIZE_CELL);
 
     // Adjust width and height to be multiples of cell_size
-    let adjusted_width = ((width as f32 / cell_size).floor() * cell_size) as f32;
-    let adjusted_height = ((height as f32 / cell_size).floor() * cell_size) as f32;
+    let adjusted_width = (width as f32 / cell_size).floor() * cell_size;
+    let adjusted_height = (height as f32 / cell_size).floor() * cell_size;
 
     let delta = 1.0 / delta.max(MIN_DELTA) as f32;
 
@@ -161,44 +161,43 @@ pub fn main() -> GameResult {
     let args = Args::parse();
 
     // Initialize variables
-    let width;
-    let height;
-    let delta;
-    let cell_size;
-    let noise;
-    let seed = args.seed;
-
     // Check if any arguments are below the minimum values and display a message
-    if args.width < MIN_WIDTH {
+    let width = if args.width < MIN_WIDTH {
         println!("Warning: Width is below the minimum value of {}. Using {} instead.", MIN_WIDTH, MIN_WIDTH);
-        width = MIN_WIDTH;
+        MIN_WIDTH
     } else {
-        width = args.width.max(MIN_WIDTH);
-    }
-    if args.height < MIN_HEIGHT {
+        args.width.max(MIN_WIDTH)
+    };
+
+    let height= if args.height < MIN_HEIGHT {
         println!("Warning: Height is below the minimum value of {}. Using {} instead.", MIN_HEIGHT, MIN_HEIGHT);
-        height = MIN_HEIGHT;
+        MIN_HEIGHT
     } else {
-        height = args.height.max(MIN_HEIGHT);
-    }
-    if args.delta < MIN_DELTA {
+        args.height.max(MIN_HEIGHT)
+    };
+
+    let delta = if args.delta < MIN_DELTA {
         println!("Warning: Delta time is below the minimum value of {}. Using {} instead.", MIN_DELTA, MIN_DELTA);
-        delta = MIN_DELTA;
+        MIN_DELTA
     } else {
-        delta = args.delta.max(MIN_DELTA);
-    }
-    if args.cellsize < MIN_SIZE_CELL {
+        args.delta.max(MIN_DELTA)
+    };
+
+    let cell_size = if args.cellsize < MIN_SIZE_CELL {
         println!("Warning: Cell size is below the minimum value of {}. Using {} instead.", MIN_SIZE_CELL, MIN_SIZE_CELL);
-        cell_size = MIN_SIZE_CELL;
+        MIN_SIZE_CELL
     } else {
-        cell_size = args.cellsize.max(MIN_SIZE_CELL);
-    }
-    noise = if args.noise == NoiseType::Perlin || args.noise == NoiseType::Fbm {
+        args.cellsize.max(MIN_SIZE_CELL)
+    };
+    
+    let noise = if args.noise == NoiseType::Perlin || args.noise == NoiseType::Fbm {
         args.noise
     } else {
         println!("Warning: No provided noise type is not supported. Using Perlin noise instead.");
         NoiseType::Perlin
     };
+
+    let seed = args.seed;
 
     // Update constants
     update_constants(width, height, delta, cell_size, seed, noise);

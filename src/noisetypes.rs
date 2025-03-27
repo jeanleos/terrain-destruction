@@ -1,4 +1,3 @@
-
 // -----------------------------------------------------------------------------
 // File: noisetypes.rs
 // Description:
@@ -22,6 +21,7 @@ use clap::ValueEnum;
 pub enum NoiseType {
     #[value(alias = "perlin")]
     Perlin,
+    
     #[value(alias = "fbm")]
     Fbm,
 }

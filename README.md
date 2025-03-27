@@ -84,6 +84,7 @@ Finally, this project can be easily modified, and new effects could be added.
 - 24/03: Caching, quadtrees, noises.
 - 25/03: Optimisation + InstanceArray
 - 26/03: Added ability to change the default generation noise (Perlin or Fractal Brownian Motion)
+- 27/03: Lint.
 
 ## Authors
 

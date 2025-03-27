@@ -358,8 +358,8 @@ impl MainState {
         let now = Instant::now();
 
         // Get the screen 
-        let width = read_screen_width() as f32;
-        let height = read_screen_height() as f32;
+        let width = read_screen_width();
+        let height = read_screen_height();
 
         // Update each effect
         for eff in &mut self.effects {
@@ -650,8 +650,8 @@ impl EventHandler<GameError> for MainState {
             });
 
             let footer_dims = footer_text.dimensions(ctx).unwrap_or_default();
-            let footer_x = (self.screen_width - footer_dims.w as f32) / 2.0;
-            let footer_y = self.screen_height - footer_dims.h as f32 - 10.0; // 10px above the bottom border
+            let footer_x = (self.screen_width - footer_dims.w) / 2.0;
+            let footer_y = self.screen_height - footer_dims.h - 10.0; // 10px above the bottom border
 
             canvas.draw(
                 &footer_text,
@@ -661,8 +661,8 @@ impl EventHandler<GameError> for MainState {
             );
         
             let text_dims = text.dimensions(ctx).unwrap_or_default();
-            let text_x = (self.screen_width - text_dims.w as f32) / 2.0;
-            let text_y = (self.screen_height - text_dims.h as f32) / 2.0;
+            let text_x = (self.screen_width - text_dims.w) / 2.0;
+            let text_y = (self.screen_height - text_dims.h) / 2.0;
         
             canvas.draw(
                 &text,
@@ -736,8 +736,8 @@ impl EventHandler<GameError> for MainState {
 
             let btn_label = Text::new(*label);
             let label_dims = btn_label.dimensions(ctx).unwrap_or_default();
-            let label_x = button_x + (button_width - label_dims.w as f32) / 2.0;
-            let label_y = button_y + (button_height - label_dims.h as f32) / 2.0;
+            let label_x = button_x + (button_width - label_dims.w) / 2.0;
+            let label_y = button_y + (button_height - label_dims.h) / 2.0;
             canvas.draw(
                 &btn_label,
                 DrawParam::default().dest(ggez::mint::Point2 { x: label_x, y: label_y }),
