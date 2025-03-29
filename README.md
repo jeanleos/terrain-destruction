@@ -58,7 +58,7 @@ Example: `cargo run --release -- --width=500 --height=500 --noise perlin`
 - Cache: Shape caching for drawing terrain faster.
 - Modules: Rust modules making.
 - Geometry: Line directions, radian angles, collision detection, basic Euclidian mathematics
-- General optimisation.
+- General optimisation: Caching, clever drawing, less calculations, bigger window.
 - Sounds: Understanding of the `rodio` library.
 
 ## Our goal
@@ -75,16 +75,55 @@ Finally, this project can be easily modified, and new effects could be added.
 
 # Logs
 
-- 13/03: Testing `bevy` library with the ECS system and exploring Perlin noise generation.
-- 15/03: Switching to `ggez` library, creating tiles with colours.
-- 16/03: Command line arguments, creating a window, buttons.
-- 17/03: Making effects.
-- 18/03: Direction for effects, Calculating collisions.
-- 23/03: Bouncing effects.
-- 24/03: Caching, quadtrees, noises.
-- 25/03: Optimisation + InstanceArray
-- 26/03: Added ability to change the default generation noise (Perlin or Fractal Brownian Motion)
-- 27/03: Lint.
+## 13/03: Exploration
+
+Testing `bevy` library with the ECS system and exploring Perlin noise generation.
+The main difficulty was understanding how `bevy` works and how to implement Perlin noise in Rust. It seemed like `bevy` was very powerful but quite complicated to use.
+
+# 15/03: Starting creating tiles
+
+Switching to `ggez` library as it was easier to use. We wanted to focus on functionalities rather than on optimisation, it would be a later point. We have started by creating tiles with colours, each representing grass, rock or air, and we started added functions to generate terrain. The main difficulty was understanding how `ggez` was working.
+
+# 16/03: User Interface and arguments
+
+Using `clap`, we started adding the possibility to pass arguments through the command line. It would allow the user to change some settings such as the size of the grid. We likewise added a window for the project. The problem was about modifying global constants, we used `lazy_static` to fix some of those issues. We added buttons to the UI without any functionalities at first.
+
+# 17/03: Creating effects
+
+We added three effects: Bubbles, MoreBubbles and Lightning, each with a different system. The user can change the effects with the UI buttons. They were spawning but not moving as we did not implement movement yet.
+
+# 18/03: Direction for effects, calculating collisions
+
+We changed the effects structure to account for a direction. The program would move the effect relative to this direction and would be useful as we want to make the effects bounce off terrain and window edges. We likewise added the ability for effects to destroy terrain based on their lifetime. It seemed very obvious our calculations would require optimisation as more tiles and more effects spawning caused jittering.
+
+# 23/03: Bouncing effects
+
+We added the ability for effects to bounce off edges. We also wanted to make the effects bounce off the terrain, but adding window edges was easier at that time. The difficulty was finding the right calculation for making the bounce realistic. Likewise, the project was starting to slow down as more calculations were added. (a window of 500 by 500)
+
+# 24/03: Caching, quadtrees, noises.
+
+We first added a bouncing sound. This had a major problem as instancing a sound would be destroyed directly after exiting the function. Waiting for the sound to end was also not a solution as it would freeze the entire project. We eventually decided to store the sounds in an array and remove it when ended.
+
+We started optimising the project as it was running slower than expected. Caching was a first solution: instead of creating a rectangle for each tile, we would store the mesh when creating a MainState and then using it for each tile. This helped a bit. We also decided to implement QuadTrees to reduce distance checking with tiles. The main difficulty was now to find ways to optimise the project using our knowledge and writing the code in Rust. Although optimisation was not part of the project, the knowledge put into doing so adds another challenge in this project, namely the ability to code anything in Rust. The project runs fine with a 700x500 window.
+
+# 25/03: Optimisation, InstanceArray
+
+Another layer of optimisation was required to achieve better final results. We changed the calculations to account for InstanceArray which is available in `ggez`. Instead of fetching the cached square and drawing it each time, we would push it into an InstanceArray which would be drawn entirely at the end of the draw loop. This massively improved performance. The main difficulty was understanding how InstanceArray was working and finally implementing it. The project is now running at 1000x500
+
+# 26/03: New noise
+
+We added ability to change the default generation noise through the `--noise <NOISE>` flag. The user can now use Perlin noise `perlin` or Fractal Brownian Motion noise `fbm`.
+The main difficulty was changing the code to account for this new noise.
+
+# 27/03: Lint
+
+Using `clippy`, we fixed some linting problems. Only 5 were present, namely unnecessary casting.
+
+# 29/03: Final optimisation, terrain bouncing
+
+As a final optimisation, instead of putting multiple rectangle images in an InstanceArray, we draw rectangles that span over multiple tiles to reduce the number of calculations. The first version was only taking into account horizontal lines. The main difficulty was implementing such an algorithm. Then, we wanted to enhance the algorithm to be in 2D and span vertically, this was quite complicated. The project is now running in 1920x1080 without any problems.
+
+We added terrain bouncing as our final functionality (listed as our goal). The main difficulty in this situation was a double borrowing in the for loop and damage function call. We decided the manually damage the cell.
 
 ## Authors
 

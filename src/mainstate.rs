@@ -22,6 +22,7 @@ use std::time::{Duration, Instant};
 use std::fs::File;
 use std::io::BufReader;
 use std::sync::{Arc, RwLock};
+use std::collections::HashMap;
 use rand::Rng;
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink};
 use clap::Parser;
@@ -41,6 +42,7 @@ use crate::noisetypes::NoiseType;
 /// - `effects`: A vector of active effects in the game.
 /// - `seed`: The seed used for terrain generation.
 /// - `perlin`: A Perlin noise generator for procedural terrain generation.
+/// - `fbm`: A Fractional Brownian Motion generator for terrain generation.
 /// - `input_seed`: A string representing the user-provided seed for terrain generation.
 /// - `is_focused_input`: A boolean indicating whether the input field is focused.
 /// - `screen_width`: The width of the game screen.
@@ -53,8 +55,6 @@ use crate::noisetypes::NoiseType;
 /// - `quadtree_dirty`: A flag indicating whether the quadtree needs to be updated.
 /// - `intro_timer`: A timer for displaying the introduction screen.
 /// - `show_intro`: A boolean indicating whether the introduction screen is active.
-/// - `grass_image`: An image representing the grass material.
-/// - `rock_image`: An image representing the rock material.
 /// - `lightning_mesh`: A mesh representing the lightning effect.
 /// - `bubble_mesh`: A mesh representing the bubble effect.
 /// - `more_bubble_mesh`: A mesh representing the more bubbles effect.
@@ -124,8 +124,6 @@ pub struct MainState {
     show_intro: bool, 
 
     // Meshes for terrain and effects
-    grass_image: Image,
-    rock_image: Image,
     lightning_mesh: Mesh,
     bubble_mesh: Mesh,
     more_bubble_mesh: Mesh,
@@ -154,6 +152,7 @@ pub struct MainState {
 ///   - `amount`: The amount of damage to apply.
 ///   - `ignore_durability`: If `true`, the cell is destroyed regardless of its durability.
 /// - Marks the quadtree as dirty if a cell is modified.
+/// - Returns the material of the cell after damage is applied.
 ///
 /// ## `spawn_effect`
 /// Spawns a new effect at a specified position.
@@ -187,7 +186,8 @@ pub struct MainState {
 impl MainState {
     pub fn new(ctx: &Context) -> GameResult<MainState> {
         let (_stream, stream_handle) = OutputStream::try_default().expect("Failed to create audio output stream");
-        // initialize the quadtree covering the entire terrain area
+        
+        // Initialize the quadtree covering the entire terrain area
         let qt_boundary = Rect::new(0.0, 0.0, read_terrain_width() as f32 * read_cell_size(), read_terrain_height() as f32 * read_cell_size());
         let mut s = MainState {
             terrain: vec![vec![
@@ -209,8 +209,6 @@ impl MainState {
             quadtree_dirty: false, // Initialize the flag
             intro_timer: 3.0, // Show the intro for 3 seconds
             show_intro: true, // Start with the introduction screen
-            grass_image: Image::from_color(ctx, read_cell_size() as u32, read_cell_size() as u32, Some(Color::from_rgb(111, 171, 51))),
-            rock_image: Image::from_color(ctx, read_cell_size() as u32, read_cell_size() as u32, Some(Color::from_rgb(123, 108, 113))),
             lightning_mesh: Mesh::new_rectangle(
                 ctx,
                 DrawMode::fill(),
@@ -254,7 +252,6 @@ impl MainState {
         } else {
             self.fbm = Fbm::new(actual_seed);
         }
-        //self.perlin = Fbm::new(actual_seed);//Perlin::new(actual_seed);
     
         // Generate the terrain based on Perlin noise
         let scale = 0.05;
@@ -271,12 +268,14 @@ impl MainState {
                     NoiseType::Fbm => self.fbm.get([nx, ny]),
                     _ => 0.0,
                 };
+
+                // Assign material and durability based on the noise value
                 let (mat, dura) = if val < -0.2 {
                     (Material::Air, 0.0)
                 } else if val < 0.2 {
-                    (Material::Grass, 10.0)
+                    (Material::Grass, 1.0)
                 } else {
-                    (Material::Rock, 30.0)
+                    (Material::Rock, 8.0)
                 };
 
                 // Update the cell in the terrain
@@ -304,7 +303,7 @@ impl MainState {
     }
 
     // Damage the terrain at the specified position
-    fn damage_terrain_at(&mut self, x: usize, y: usize, amount: f32, ignore_durability: bool) {
+    fn damage_terrain_at(&mut self, x: usize, y: usize, amount: f32, ignore_durability: bool) -> Material {
         // Check if the position is within the terrain bounds
         if x < read_terrain_width() && y < read_terrain_height() {
 
@@ -326,6 +325,9 @@ impl MainState {
                 // Mark the quadtree as dirty
                 self.quadtree_dirty = true; 
             }
+            cell.material
+        } else {
+            Material::Air
         }
     }
 
@@ -362,7 +364,9 @@ impl MainState {
         let height = read_screen_height();
 
         // Update each effect
-        for eff in &mut self.effects {
+        for i in 0..self.effects.len() {
+
+            let eff = &mut self.effects[i];
 
             // Get the elapsed time since the effect started
             let elapsed = now.duration_since(eff.started_at).as_secs_f32();
@@ -380,7 +384,7 @@ impl MainState {
             eff.position.1 += dy;
 
             // Check if the effect is outside the borders
-            let bounced = (eff.position.0 <= 0.0 || eff.position.0 >= width ||
+            let mut bounced = (eff.position.0 <= 0.0 || eff.position.0 >= width ||
                            eff.position.1 <= 0.0 || eff.position.1 >= height);
 
             // Bounce effect off the edges.
@@ -424,14 +428,24 @@ impl MainState {
                     let dmg = match eff.effect_type {
                         EffectType::Bubbles => 5.0,
                         EffectType::MoreBubbles => 5.0,
-                        EffectType::Lightning => 8.0,
+                        EffectType::Lightning => 10.0,
                     };
-
-                    // Ignore durability for lightning effects
                     let ignore_durability = matches!(eff.effect_type, EffectType::Lightning);
-
-                    // Collect the damage requests
+                    
+                    // Queue the damage request first
                     damage_requests.push((candidate.tx, candidate.ty, dmg, ignore_durability));
+
+                    // Check if the cell is still intact and would survive the damage
+                    let cell = &self.terrain[candidate.tx][candidate.ty];
+                    if cell.material != Material::Air {
+                        let remaining_durability = if ignore_durability { 0.0 } else { cell.durability - dmg };
+                        if remaining_durability > 0.0 {
+                            // Bounce by reversing the direction
+                            eff.direction += std::f32::consts::PI + rand::rng().random_range(-std::f32::consts::PI..std::f32::consts::PI);
+                            bounced = true;
+                            break; // Bounce off the first intact cell
+                        }
+                    }
                 }
             }
     
@@ -485,18 +499,18 @@ impl MainState {
                 }
             }
         }
-    
-        // Apply all collected damage requests
-        for (x, y, amount, ignore_durability) in damage_requests {
-            self.damage_terrain_at(x, y, amount, ignore_durability);
-        }
-    
+
         // Add new effects to the list
         self.effects.extend(new_effects);
         
+        // Process all collected damage requests after the loop
+        for (tx, ty, dmg, ignore_durability) in damage_requests {
+            self.damage_terrain_at(tx, ty, dmg, ignore_durability);
+        }
+
         // Remove expired effects
         self.effects.retain(|eff| now.duration_since(eff.started_at) < Duration::from_secs_f32(3.0));
-    
+
         // Play all collected sounds after the loop
         for sound_path in sounds_to_play {
             self.play_sound(sound_path, 0.2);
@@ -605,32 +619,99 @@ impl EventHandler<GameError> for MainState {
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         let mut canvas = Canvas::from_frame(ctx, Color::WHITE);
 
-        // Create InstanceArrays for grass and rock
-        let mut grass_instances = InstanceArray::new(ctx, self.grass_image.clone());
-        let mut rock_instances = InstanceArray::new(ctx, self.rock_image.clone());
+        // HashMap to store InstanceArrays for each size
+        let mut grass_instance_arrays: HashMap<(u32, u32), InstanceArray> = HashMap::new();
+        let mut rock_instance_arrays: HashMap<(u32, u32), InstanceArray> = HashMap::new();
 
-        for x in 0..read_terrain_width() {
-            for y in 0..read_terrain_height() {
-                let cell = &self.terrain[x][y];
-                let dest = ggez::mint::Point2 {
-                    x: x as f32 * read_cell_size(),
-                    y: y as f32 * read_cell_size(),
-                };
+        // Track visited cells to avoid processing the same cell multiple times
+        let mut visited = vec![vec![false; read_terrain_width()]; read_terrain_height()];
 
-                match cell.material {
+        for y in 0..read_terrain_height() {
+            for x in 0..read_terrain_width() {
+
+                 // Skip already processed cells
+                if visited[y][x] {
+                    continue;
+                }
+
+                let current_material = &self.terrain[x][y].material;
+
+                // Skip air cells
+                if *current_material == Material::Air {
+                    continue;
+                }
+
+                // Determine the width and height of the rectangle
+                let mut width = 1;
+                let mut height = 1;
+
+                // Expand horizontally
+                while x + width < read_terrain_width()
+                    && self.terrain[x + width][y].material == *current_material
+                    && !visited[y][x + width]
+                {
+                    width += 1;
+                }
+
+                // Expand vertically
+                'vertical: while y + height < read_terrain_height() {
+                    for dx in 0..width {
+                        if self.terrain[x + dx][y + height].material != *current_material
+                            || visited[y + height][x + dx]
+                        {
+                            break 'vertical;
+                        }
+                    }
+                    height += 1;
+                }
+
+                // Mark all cells in the rectangle as visited
+                for dy in 0..height {
+                    for dx in 0..width {
+                        visited[y + dy][x + dx] = true;
+                    }
+                }
+
+                // Draw the rectangle
+                let rect = Rect::new(
+                    x as f32 * read_cell_size(),
+                    y as f32 * read_cell_size(),
+                    width as f32 * read_cell_size(),
+                    height as f32 * read_cell_size(),
+                );
+
+                match current_material {
                     Material::Grass => {
-                        grass_instances.push(DrawParam::default().dest(dest));
+                        // Fetch or create the InstanceArray for this size
+                        let instance_array = grass_instance_arrays
+                            .entry((width as u32, height as u32))
+                            .or_insert_with(|| InstanceArray::new(ctx, Image::from_color(ctx, width as u32 * read_cell_size() as u32, height as u32 * read_cell_size() as u32, Some(Color::from_rgb(111, 171, 51)))));
+
+                        instance_array.push(DrawParam::default().dest(rect.point()));
+                    
                     }
                     Material::Rock => {
-                        rock_instances.push(DrawParam::default().dest(dest));
+                        // Fetch or create the InstanceArray for this size
+                        let instance_array = rock_instance_arrays
+                            .entry((width as u32, height as u32))
+                            .or_insert_with(|| InstanceArray::new(ctx, Image::from_color(ctx, width as u32 * read_cell_size() as u32, height as u32 * read_cell_size() as u32, Some(Color::from_rgb(123, 108, 113)))));
+
+                        instance_array.push(DrawParam::default().dest(rect.point()));
                     }
-                    _ => continue,
+                    _ => {}
                 }
             }
         }
 
-        grass_instances.draw(&mut canvas, DrawParam::default());
-        rock_instances.draw(&mut canvas, DrawParam::default());
+        // Draw all grass instance arrays
+        for instance_array in grass_instance_arrays.values() {
+            instance_array.draw(&mut canvas, DrawParam::default());
+        }
+
+        // Draw all rock instance arrays
+        for instance_array in rock_instance_arrays.values() {
+            instance_array.draw(&mut canvas, DrawParam::default());
+        }
 
         if self.show_intro {
             let mut canvas = Canvas::from_frame(ctx, Color::WHITE); // White background
@@ -638,20 +719,20 @@ impl EventHandler<GameError> for MainState {
             // Create the text with a larger font size
             let text = Text::new(TextFragment {
                 text: "Destroy the terrain!".to_string(),
-                scale: Some(ggez::graphics::PxScale::from(30.0)), // Set font size to 48
+                scale: Some(ggez::graphics::PxScale::from(30.0)),
                 ..Default::default()
             });
 
             // Add smaller text near the bottom border
             let footer_text = Text::new(TextFragment {
                 text: "DIARRA Amara & SERRANO Jean-Léo. 2025 ESIEE Paris".to_string(),
-                scale: Some(ggez::graphics::PxScale::from(16.0)), // Smaller font size
+                scale: Some(ggez::graphics::PxScale::from(16.0)),
                 ..Default::default()
             });
 
             let footer_dims = footer_text.dimensions(ctx).unwrap_or_default();
             let footer_x = (self.screen_width - footer_dims.w) / 2.0;
-            let footer_y = self.screen_height - footer_dims.h - 10.0; // 10px above the bottom border
+            let footer_y = self.screen_height - footer_dims.h - 10.0;
 
             canvas.draw(
                 &footer_text,
