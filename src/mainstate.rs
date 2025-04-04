@@ -611,23 +611,35 @@ impl EventHandler<GameError> for MainState {
         let mut grass_instances = InstanceArray::new(ctx, self.grass_image.clone());
         let mut rock_instances = InstanceArray::new(ctx, self.rock_image.clone());
 
-        for x in 0..read_terrain_width() {
-            for y in 0..read_terrain_height() {
-                let cell = &self.terrain[x][y];
-                let dest = ggez::mint::Point2 {
-                    x: x as f32 * read_cell_size(),
-                    y: y as f32 * read_cell_size(),
-                };
+        let cell_size = read_cell_size();
+        let terrain_width = read_terrain_width();
+        let terrain_height = read_terrain_height();
+        let terrain = &self.terrain;
 
-                match cell.material {
-                    Material::Grass => {
-                        grass_instances.push(DrawParam::default().dest(dest));
+        let draw_commands: Vec<(Material, DrawParam)> = (0..terrain_width)
+            .into_par_iter()
+            .flat_map_iter(|x| {
+                (0..terrain_height).filter_map(move |y| {
+                    let cell = &terrain[x][y];
+                    let dest = ggez::mint::Point2 {
+                        x: x as f32 * cell_size,
+                        y: y as f32 * cell_size,
+                    };
+                    match cell.material {
+                        Material::Grass => Some((Material::Grass, DrawParam::default().dest(dest))),
+                        Material::Rock => Some((Material::Rock, DrawParam::default().dest(dest))),
+                        _ => None,
                     }
-                    Material::Rock => {
-                        rock_instances.push(DrawParam::default().dest(dest));
-                    }
-                    _ => continue,
-                }
+                })
+            })
+            .collect();
+
+        // Sequentially push parameters into instance arrays.
+        for (material, param) in draw_commands {
+            match material {
+                Material::Grass => grass_instances.push(param),
+                Material::Rock => rock_instances.push(param),
+                _ => {},
             }
         }
 
