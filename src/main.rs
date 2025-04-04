@@ -46,6 +46,9 @@ use crate::mainstate::MainState;
 mod noisetypes;
 use crate::noisetypes::NoiseType;
 
+mod noisegenerator;
+use crate::noisegenerator::NoiseGenerator;
+
 // Constants
 const MIN_WIDTH: u32 = 500;
 const MIN_HEIGHT: u32 = 300;
@@ -190,7 +193,7 @@ pub fn main() -> GameResult {
         args.cellsize.max(MIN_SIZE_CELL)
     };
     
-    let noise = if args.noise == NoiseType::Perlin || args.noise == NoiseType::Fbm {
+    let noise = if args.noise == NoiseType::Perlin || args.noise == NoiseType::Fbm || args.noise == NoiseType::Simplex {
         args.noise
     } else {
         println!("Warning: No provided noise type is not supported. Using Perlin noise instead.");

@@ -17,6 +17,7 @@ use clap::ValueEnum;
 /// 
 /// - `Perlin`: Represents Perlin noise.
 /// - `Fbm`: Represents Fractal Brownian Motion (FBM) noise.
+/// - `Simplex`: Represents Simplex noise.
 #[derive(ValueEnum, Clone, Copy, PartialEq)]
 pub enum NoiseType {
     #[value(alias = "perlin")]
@@ -24,13 +25,17 @@ pub enum NoiseType {
     
     #[value(alias = "fbm")]
     Fbm,
+
+    #[value(alias = "simplex")]
+    Simplex,
 }
 
 impl fmt::Display for NoiseType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             NoiseType::Perlin => write!(f, "Perlin"),
-            NoiseType::Fbm => write!(f, "Fractal Brownian Motion")
+            NoiseType::Fbm => write!(f, "Fractal Brownian Motion"),
+            NoiseType::Simplex => write!(f, "Simplex"),
         }
     }
 }

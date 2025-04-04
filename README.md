@@ -48,7 +48,7 @@ One can provide flags to modify some properties in the project.
 3. `--height`: Changes the window's height
 4. `--cellsize`: Changes the size of cells (in pixels)
 5. `--seed`: Changes the current noise's seed for terrain generation
-6. `--noise`: Use a noise generation (perlin, fbm)
+6. `--noise`: Use a noise generation (perlin, fbm, simplex)
 
 Example: `cargo run --release -- --width=500 --height=500 --noise perlin`
 
@@ -60,6 +60,7 @@ Example: `cargo run --release -- --width=500 --height=500 --noise perlin`
 - Geometry: Line directions, radian angles, collision detection, basic Euclidian mathematics
 - General optimisation: Caching, clever drawing, less calculations, bigger window.
 - Sounds: Understanding of the `rodio` library.
+- Parallelism: Using `rayon`, we can iterate with parallel threads.
 
 ## Our goal
 
@@ -69,7 +70,7 @@ We wanted to create a simulation with terrain reaction to effects. The first goa
 
 The lightning strike is likewise based on complex mathematical notions which would have taken more time to implement, so would have the explosion.
 
-Besides, we would have wanted to explore more ways to optimise the project to create the preceding effects. For instance, exploring parallelism with rayon was in our schedule but requires refactoring every for loop.
+Besides, we would have wanted to explore more ways to optimise the project to create the preceding effects.
 
 Finally, this project can be easily modified, and new effects could be added.
 
@@ -119,11 +120,17 @@ The main difficulty was changing the code to account for this new noise.
 
 Using `clippy`, we fixed some linting problems. Only 5 were present, namely unnecessary casting.
 
-# 29/03: Final optimisation, terrain bouncing
+# 29/03: Optimisation, terrain bouncing
 
 As a final optimisation, instead of putting multiple rectangle images in an InstanceArray, we draw rectangles that span over multiple tiles to reduce the number of calculations. The first version was only taking into account horizontal lines. The main difficulty was implementing such an algorithm. Then, we wanted to enhance the algorithm to be in 2D and span vertically, this was quite complicated. The project is now running in 1920x1080 without any problems.
 
 We added terrain bouncing as our final functionality (listed as our goal). The main difficulty in this situation was a double borrowing in the for loop and damage function call. We decided the manually damage the cell.
+
+# 05/04: Added Simplex, problems with optimisation
+
+We added a new noise for generating terrain. To maintain a future-proof architecture, we moved the generation to a new structure named NoiseGenerator which includes Perlin, Simplex and Fbm.
+
+After testing on low-end devices, the project seems unoptimised with the latest modifications. Indeed, the new collision system requires more calculations for each bounce, therefore we used parallelism for effects with `rayon`.
 
 ## Authors
 

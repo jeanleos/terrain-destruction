@@ -27,12 +27,17 @@ use rand::Rng;
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink};
 use clap::Parser;
 
+use rayon::prelude::*;
+use std::sync::{Mutex, atomic::{AtomicUsize, Ordering}};
+
+
 use crate::{read_cell_size, read_delta, read_noisetype, read_screen_height, read_screen_width, read_seed, read_terrain_height, read_terrain_width};
 use crate::cell::Cell;
 use crate::effect::{Effect, EffectType};
 use crate::materials::Material;
 use crate::quadtree;
 use crate::noisetypes::NoiseType;
+use crate::noisegenerator::NoiseGenerator;
 
 /// The `MainState` struct represents the main game state for the Terrain Destruction game.
 /// It manages the terrain, effects, UI, audio, and game logic.
@@ -41,8 +46,7 @@ use crate::noisetypes::NoiseType;
 /// - `terrain`: A 2D vector representing the terrain grid, where each cell is of type `Cell`.
 /// - `effects`: A vector of active effects in the game.
 /// - `seed`: The seed used for terrain generation.
-/// - `perlin`: A Perlin noise generator for procedural terrain generation.
-/// - `fbm`: A Fractional Brownian Motion generator for terrain generation.
+/// - `noise_generator`: An instance of `NoiseGenerator` for generating terrain noise.
 /// - `input_seed`: A string representing the user-provided seed for terrain generation.
 /// - `is_focused_input`: A boolean indicating whether the input field is focused.
 /// - `screen_width`: The width of the game screen.
@@ -92,8 +96,7 @@ pub struct MainState {
 
     // Terrain generation
     seed: i64,
-    perlin: Perlin,
-    fbm: Fbm<Perlin>,
+    noise_generator: NoiseGenerator,
 
     // UI
     input_seed: String,
@@ -195,8 +198,7 @@ impl MainState {
             ]; read_terrain_width()],
             effects: vec![],
             seed: read_seed(),
-            perlin: Perlin::new(read_seed() as u32),
-            fbm: Fbm::new(read_seed() as u32),
+            noise_generator: NoiseGenerator::new(read_noisetype(), read_seed() as u32),
             input_seed: String::new(),
             is_focused_input: false,
             screen_width: read_screen_width(),
@@ -247,11 +249,7 @@ impl MainState {
         };
 
         // Update the seed
-        if (read_noisetype() == NoiseType::Perlin) {
-            self.perlin = Perlin::new(actual_seed);
-        } else {
-            self.fbm = Fbm::new(actual_seed);
-        }
+        self.noise_generator.generate(actual_seed);
     
         // Generate the terrain based on Perlin noise
         let scale = 0.05;
@@ -263,11 +261,7 @@ impl MainState {
             for y in 0..terrain_height {
                 let nx = x as f64 * scale;
                 let ny = y as f64 * scale;
-                let val = match read_noisetype() {
-                    NoiseType::Perlin => self.perlin.get([nx, ny]),
-                    NoiseType::Fbm => self.fbm.get([nx, ny]),
-                    _ => 0.0,
-                };
+                let val = self.noise_generator.get(nx, ny);
 
                 // Assign material and durability based on the noise value
                 let (mat, dura) = if val < -0.2 {
@@ -350,11 +344,6 @@ impl MainState {
         // Ensure the quadtree is up-to-date
         self.update_quadtree_if_needed(); 
 
-        // Collect damage requests, new effects, and sounds to play
-        let mut damage_requests = vec![];
-        let mut new_effects = vec![];
-        let mut sounds_to_play = vec![];
-
         // Counter to track the number of bubbles
         let mut bubble_count = 0; 
         let now = Instant::now();
@@ -363,148 +352,142 @@ impl MainState {
         let width = read_screen_width();
         let height = read_screen_height();
 
+        // Collect damage requests, new effects, and sounds to play with Mutexes semaphores
+        let damage_requests = Mutex::new(Vec::new());
+        let new_effects = Mutex::new(Vec::new());
+        let sounds_to_play = Mutex::new(Vec::new());
+        let bubble_count = AtomicUsize::new(0);
+        let now = Instant::now();
+
         // Update each effect
-        for i in 0..self.effects.len() {
-
-            let eff = &mut self.effects[i];
-
-            // Get the elapsed time since the effect started
+        self.effects.par_iter_mut().for_each(|eff| {
             let elapsed = now.duration_since(eff.started_at).as_secs_f32();
-
-            // Update the effect position based on its type
             let speed = match eff.effect_type {
                 EffectType::Lightning => 200.0,
                 _ => 50.0,
             };
-
-            // Update the effect position based on its direction and speed
+        
+            // Update the effect's position
             let dx = speed * dt * eff.direction.cos();
             let dy = speed * dt * eff.direction.sin();
             eff.position.0 += dx;
             eff.position.1 += dy;
-
+            
+            // Get screen dimensions
+            let width = read_screen_width();
+            let height = read_screen_height();
+            
             // Check if the effect is outside the borders
-            let mut bounced = (eff.position.0 <= 0.0 || eff.position.0 >= width ||
-                           eff.position.1 <= 0.0 || eff.position.1 >= height);
-
-            // Bounce effect off the edges.
+            let mut bounced = (eff.position.0 <= 0.0
+                || eff.position.0 >= width
+                || eff.position.1 <= 0.0
+                || eff.position.1 >= height);
+            
+            // Bounce the effect off the edges
             eff.bounce(width, height);
-
-            // If a bounce occurred, add the sound to the list
+            
             if bounced {
                 let boing_sounds = ["resources/sounds/boing/boing.ogg", "resources/sounds/boing/boing_casseur.ogg"];
                 let index = rand::rng().random_range(0..boing_sounds.len());
-                sounds_to_play.push(boing_sounds[index]); // Collect the sound path
+                sounds_to_play.lock().unwrap().push(boing_sounds[index]);
             }
             
-            // Calculate the bounding box and process damage requests, spawn sub-effects, etc.
+            // Process cells near the effect
             let radius = read_cell_size();
-
-            // Query the quadtree for cells within the effect's radius
-            let query_rect = Rect::new(
+            let query_rect = ggez::graphics::Rect::new(
                 eff.position.0 - radius,
                 eff.position.1 - radius,
                 radius * 2.0,
                 radius * 2.0,
             );
-
-            // Collect all cells within the query rectangle
             let candidates = self.terrain_quadtree.query(query_rect);
-
-            // Process each candidate cell
             for candidate in candidates {
-
-                // Calculate the center of the cell
                 let cell_center_x = candidate.x;
                 let cell_center_y = candidate.y;
-
-                // Calculate Manhattan distance
                 let distance = (eff.position.0 - cell_center_x).abs() + (eff.position.1 - cell_center_y).abs();
-
-                // Check if the distance is within the radius
                 if distance <= radius {
-
-                    // Apply damage based on the effect type
                     let dmg = match eff.effect_type {
                         EffectType::Bubbles => 5.0,
                         EffectType::MoreBubbles => 5.0,
                         EffectType::Lightning => 10.0,
                     };
                     let ignore_durability = matches!(eff.effect_type, EffectType::Lightning);
+                    damage_requests.lock().unwrap().push((candidate.tx, candidate.ty, dmg, ignore_durability));
                     
-                    // Queue the damage request first
-                    damage_requests.push((candidate.tx, candidate.ty, dmg, ignore_durability));
-
-                    // Check if the cell is still intact and would survive the damage
                     let cell = &self.terrain[candidate.tx][candidate.ty];
                     if cell.material != Material::Air {
-                        let remaining_durability = if ignore_durability { 0.0 } else { cell.durability - dmg };
-                        if remaining_durability > 0.0 {
-                            // Bounce by reversing the direction
-                            eff.direction += std::f32::consts::PI + rand::rng().random_range(-std::f32::consts::PI..std::f32::consts::PI);
+                        let remaining = if ignore_durability { 0.0 } else { cell.durability - dmg };
+                        if remaining > 0.0 {
+                            eff.direction += std::f32::consts::PI 
+                                + rand::rng().random_range(-std::f32::consts::PI..std::f32::consts::PI);
                             bounced = true;
                             break; // Bounce off the first intact cell
                         }
                     }
                 }
             }
-    
-            // Spawn sub-effects based on the effect type
+            
+            // Spawn sub-effects if not already spawned
             if !eff.spawned {
                 match eff.effect_type {
                     EffectType::Bubbles => {
-                        if rand::rng().random_bool(0.2) && bubble_count < 10 {
+                        if rand::rng().random_bool(0.2) && bubble_count.load(Ordering::SeqCst) < 10 {
                             let offset = rand::rng().random_range(-0.3..0.3);
                             let d1 = eff.direction + offset;
                             let d2 = eff.direction - offset;
-                            new_effects.push(Effect {
-                                effect_type: EffectType::Bubbles,
-                                position: eff.position,
-                                direction: d1,
-                                started_at: Instant::now(),
-                                spawned: true,
-                            });
-                            new_effects.push(Effect {
-                                effect_type: EffectType::Bubbles,
-                                position: eff.position,
-                                direction: d2,
-                                started_at: Instant::now(),
-                                spawned: true,
-                            });
-                            bubble_count += 2;
+                            {
+                                let mut ne = new_effects.lock().unwrap();
+                                ne.push(Effect {
+                                    effect_type: EffectType::Bubbles,
+                                    position: eff.position,
+                                    direction: d1,
+                                    started_at: Instant::now(),
+                                    spawned: true,
+                                });
+                                ne.push(Effect {
+                                    effect_type: EffectType::Bubbles,
+                                    position: eff.position,
+                                    direction: d2,
+                                    started_at: Instant::now(),
+                                    spawned: true,
+                                });
+                            }
+                            bubble_count.fetch_add(2, Ordering::SeqCst);
                             eff.spawned = true;
                         }
                     }
                     EffectType::MoreBubbles => {
-                        if rand::rng().random_bool(0.5) && bubble_count < 10 && !eff.spawned {
+                        if rand::rng().random_bool(0.5)
+                            && bubble_count.load(Ordering::SeqCst) < 10
+                            && !eff.spawned
+                        {
                             for _ in 0..10 {
-                                if bubble_count >= 10 {
+                                if bubble_count.load(Ordering::SeqCst) >= 10 {
                                     break;
                                 }
                                 let offset = rand::rng().random_range(-0.5..0.5);
-                                new_effects.push(Effect {
+                                new_effects.lock().unwrap().push(Effect {
                                     effect_type: EffectType::MoreBubbles,
                                     position: eff.position,
                                     direction: eff.direction + offset,
                                     started_at: Instant::now(),
                                     spawned: true,
                                 });
-                                bubble_count += 1;
+                                bubble_count.fetch_add(1, Ordering::SeqCst);
                             }
                             eff.spawned = true;
                         }
                     }
-                    // Lightning effects do not spawn anything
                     _ => {}
                 }
             }
-        }
+        });
 
         // Add new effects to the list
-        self.effects.extend(new_effects);
+        self.effects.extend(new_effects.lock().unwrap().drain(..));
         
         // Process all collected damage requests after the loop
-        for (tx, ty, dmg, ignore_durability) in damage_requests {
+        for (tx, ty, dmg, ignore_durability) in damage_requests.lock().unwrap().drain(..) {
             self.damage_terrain_at(tx, ty, dmg, ignore_durability);
         }
 
@@ -512,7 +495,7 @@ impl MainState {
         self.effects.retain(|eff| now.duration_since(eff.started_at) < Duration::from_secs_f32(3.0));
 
         // Play all collected sounds after the loop
-        for sound_path in sounds_to_play {
+        for sound_path in sounds_to_play.lock().unwrap().drain(..) {
             self.play_sound(sound_path, 0.2);
         }
     
