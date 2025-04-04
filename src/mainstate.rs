@@ -127,6 +127,8 @@ pub struct MainState {
     show_intro: bool, 
 
     // Meshes for terrain and effects
+    grass_image: Image,
+    rock_image: Image,
     lightning_mesh: Mesh,
     bubble_mesh: Mesh,
     more_bubble_mesh: Mesh,
@@ -211,6 +213,9 @@ impl MainState {
             quadtree_dirty: false, // Initialize the flag
             intro_timer: 3.0, // Show the intro for 3 seconds
             show_intro: true, // Start with the introduction screen
+            grass_image: Image::from_color(ctx, read_cell_size() as u32, read_cell_size() as u32, Some(Color::from_rgb(111, 171, 51))),
+            rock_image: Image::from_color(ctx, read_cell_size() as u32, read_cell_size() as u32, Some(Color::from_rgb(123, 108, 113))),
+            
             lightning_mesh: Mesh::new_rectangle(
                 ctx,
                 DrawMode::fill(),
@@ -602,99 +607,32 @@ impl EventHandler<GameError> for MainState {
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         let mut canvas = Canvas::from_frame(ctx, Color::WHITE);
 
-        // HashMap to store InstanceArrays for each size
-        let mut grass_instance_arrays: HashMap<(u32, u32), InstanceArray> = HashMap::new();
-        let mut rock_instance_arrays: HashMap<(u32, u32), InstanceArray> = HashMap::new();
+        // Create InstanceArrays for grass and rock
+        let mut grass_instances = InstanceArray::new(ctx, self.grass_image.clone());
+        let mut rock_instances = InstanceArray::new(ctx, self.rock_image.clone());
 
-        // Track visited cells to avoid processing the same cell multiple times
-        let mut visited = vec![vec![false; read_terrain_width()]; read_terrain_height()];
+        for x in 0..read_terrain_width() {
+            for y in 0..read_terrain_height() {
+                let cell = &self.terrain[x][y];
+                let dest = ggez::mint::Point2 {
+                    x: x as f32 * read_cell_size(),
+                    y: y as f32 * read_cell_size(),
+                };
 
-        for y in 0..read_terrain_height() {
-            for x in 0..read_terrain_width() {
-
-                 // Skip already processed cells
-                if visited[y][x] {
-                    continue;
-                }
-
-                let current_material = &self.terrain[x][y].material;
-
-                // Skip air cells
-                if *current_material == Material::Air {
-                    continue;
-                }
-
-                // Determine the width and height of the rectangle
-                let mut width = 1;
-                let mut height = 1;
-
-                // Expand horizontally
-                while x + width < read_terrain_width()
-                    && self.terrain[x + width][y].material == *current_material
-                    && !visited[y][x + width]
-                {
-                    width += 1;
-                }
-
-                // Expand vertically
-                'vertical: while y + height < read_terrain_height() {
-                    for dx in 0..width {
-                        if self.terrain[x + dx][y + height].material != *current_material
-                            || visited[y + height][x + dx]
-                        {
-                            break 'vertical;
-                        }
-                    }
-                    height += 1;
-                }
-
-                // Mark all cells in the rectangle as visited
-                for dy in 0..height {
-                    for dx in 0..width {
-                        visited[y + dy][x + dx] = true;
-                    }
-                }
-
-                // Draw the rectangle
-                let rect = Rect::new(
-                    x as f32 * read_cell_size(),
-                    y as f32 * read_cell_size(),
-                    width as f32 * read_cell_size(),
-                    height as f32 * read_cell_size(),
-                );
-
-                match current_material {
+                match cell.material {
                     Material::Grass => {
-                        // Fetch or create the InstanceArray for this size
-                        let instance_array = grass_instance_arrays
-                            .entry((width as u32, height as u32))
-                            .or_insert_with(|| InstanceArray::new(ctx, Image::from_color(ctx, width as u32 * read_cell_size() as u32, height as u32 * read_cell_size() as u32, Some(Color::from_rgb(111, 171, 51)))));
-
-                        instance_array.push(DrawParam::default().dest(rect.point()));
-                    
+                        grass_instances.push(DrawParam::default().dest(dest));
                     }
                     Material::Rock => {
-                        // Fetch or create the InstanceArray for this size
-                        let instance_array = rock_instance_arrays
-                            .entry((width as u32, height as u32))
-                            .or_insert_with(|| InstanceArray::new(ctx, Image::from_color(ctx, width as u32 * read_cell_size() as u32, height as u32 * read_cell_size() as u32, Some(Color::from_rgb(123, 108, 113)))));
-
-                        instance_array.push(DrawParam::default().dest(rect.point()));
+                        rock_instances.push(DrawParam::default().dest(dest));
                     }
-                    _ => {}
+                    _ => continue,
                 }
             }
         }
 
-        // Draw all grass instance arrays
-        for instance_array in grass_instance_arrays.values() {
-            instance_array.draw(&mut canvas, DrawParam::default());
-        }
-
-        // Draw all rock instance arrays
-        for instance_array in rock_instance_arrays.values() {
-            instance_array.draw(&mut canvas, DrawParam::default());
-        }
+        grass_instances.draw(&mut canvas, DrawParam::default());
+        rock_instances.draw(&mut canvas, DrawParam::default());
 
         if self.show_intro {
             let mut canvas = Canvas::from_frame(ctx, Color::WHITE); // White background

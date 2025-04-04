@@ -82,7 +82,7 @@ pub struct QuadTreeNode {
 /// - `query(&self, range: &Rect, found: &mut Vec<QuadTreeItem>)`:
 ///   Finds all items within a given rectangular range. If the range does not intersect
 ///   the node's boundary, the method returns immediately. Otherwise, it checks the items
-///   in the current node and recursively queries its child nodes if they exist.
+///   in the current node and iteratively queries its child nodes if they exist.
 impl QuadTreeNode {
     pub fn new(boundary: Rect, capacity: usize) -> Self {
         Self {
