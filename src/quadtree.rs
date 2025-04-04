@@ -169,26 +169,31 @@ impl QuadTreeNode {
 
     // Query the quadtree for items within a given range.
     pub fn query(&self, range: &Rect, found: &mut Vec<QuadTreeItem>) {
-        if !Self::intersects(&self.boundary, range) {
-            return;
-        }
-        for item in &self.items {
-            if Self::contains_point(range, item.x, item.y) {
-                found.push(item.clone());
+        let mut stack = Vec::new();
+        stack.push(self);
+
+        while let Some(node) = stack.pop() {
+            if !Self::intersects(&node.boundary, range) {
+                continue;
             }
-        }
-        if self.divided {
-            if let Some(ref ne) = self.northeast {
-                ne.query(range, found);
+            for item in &node.items {
+                if Self::contains_point(range, item.x, item.y) {
+                    found.push(item.clone());
+                }
             }
-            if let Some(ref nw) = self.northwest {
-                nw.query(range, found);
-            }
-            if let Some(ref se) = self.southeast {
-                se.query(range, found);
-            }
-            if let Some(ref sw) = self.southwest {
-                sw.query(range, found);
+            if node.divided {
+                if let Some(ref ne) = node.northeast {
+                    stack.push(ne);
+                }
+                if let Some(ref nw) = node.northwest {
+                    stack.push(nw);
+                }
+                if let Some(ref se) = node.southeast {
+                    stack.push(se);
+                }
+                if let Some(ref sw) = node.southwest {
+                    stack.push(sw);
+                }
             }
         }
     }
