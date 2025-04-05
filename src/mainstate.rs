@@ -127,11 +127,12 @@ pub struct MainState {
     show_intro: bool, 
 
     // Meshes for terrain and effects
-    grass_image: Image,
-    rock_image: Image,
     lightning_mesh: Mesh,
     bubble_mesh: Mesh,
     more_bubble_mesh: Mesh,
+
+    // Instance arrays for grass and rock
+    instances: InstanceArray,
 }
 
 
@@ -194,6 +195,7 @@ impl MainState {
         
         // Initialize the quadtree covering the entire terrain area
         let qt_boundary = Rect::new(0.0, 0.0, read_terrain_width() as f32 * read_cell_size(), read_terrain_height() as f32 * read_cell_size());
+        
         let mut s = MainState {
             terrain: vec![vec![
                 Cell { material: Material::Air, durability: 0.0 }; read_terrain_height()
@@ -213,8 +215,6 @@ impl MainState {
             quadtree_dirty: false, // Initialize the flag
             intro_timer: 3.0, // Show the intro for 3 seconds
             show_intro: true, // Start with the introduction screen
-            grass_image: Image::from_color(ctx, read_cell_size() as u32, read_cell_size() as u32, Some(Color::from_rgb(111, 171, 51))),
-            rock_image: Image::from_color(ctx, read_cell_size() as u32, read_cell_size() as u32, Some(Color::from_rgb(123, 108, 113))),
             lightning_mesh: Mesh::new_rectangle(
                 ctx,
                 DrawMode::fill(),
@@ -237,6 +237,7 @@ impl MainState {
                 0.5,
                 Color::from_rgb(0, 0, 0),
             )?,
+            instances: InstanceArray::new(ctx,Image::from_color(ctx, read_cell_size() as u32, read_cell_size() as u32, Some(Color::from_rgb(255, 255, 255)))),
         };
         s.generate_terrain();
         Ok(s)
@@ -244,6 +245,9 @@ impl MainState {
 
     // Generate the terrain using Perlin noise
     fn generate_terrain(&mut self) {
+
+        // Clear the terrain and instance arrays
+        self.instances.clear();
 
         // Generate the terrain using Perlin noise
         let actual_seed = if self.seed == -1 {
@@ -278,6 +282,23 @@ impl MainState {
 
                 // Update the cell in the terrain
                 self.terrain[x][y] = Cell { material: mat, durability: dura };
+
+                let dest = ggez::mint::Point2 {
+                    x: x as f32 * read_cell_size(),
+                    y: y as f32 * read_cell_size(),
+                };
+                let dp = DrawParam::default().dest(dest);
+                match mat {
+                    Material::Grass => {
+                        self.instances.push(dp.clone().color(Color::from_rgb(111, 171, 51)));
+                    }
+                    Material::Rock => {
+                        self.instances.push(dp.clone().color(Color::from_rgb(123, 108, 113)));
+                    }
+                    _ => {
+                        self.instances.push(dp.clone().color(Color::from_rgb(255, 255, 255)));
+                    }
+                }
             }
         }
     
@@ -303,19 +324,43 @@ impl MainState {
     // Damage the terrain at the specified position
     fn damage_terrain_at(&mut self, x: usize, y: usize, amount: f32, ignore_durability: bool) -> Material {
         // Check if the position is within the terrain bounds
+        
+        let should_play_sound = self.terrain[x][y].durability - amount <= 0.0;
+
+        // Play sound if the cell is not air and the durability will be 0
+        if self.terrain[x][y].material != Material::Air && (should_play_sound || ignore_durability) {
+            if rand::rng().random_bool(0.25) {
+                if self.terrain[x][y].material == Material::Grass {
+                    self.play_sound("resources/sounds/grass.ogg", 0.2);
+                } else if self.terrain[x][y].material == Material::Rock {
+                    self.play_sound("resources/sounds/stone.ogg", 0.2);
+                }
+            }
+        }
+
+        let cell = &mut self.terrain[x][y];
+        let old_type = cell.material.clone();
+        
         if x < read_terrain_width() && y < read_terrain_height() {
 
-            // Get a mutable reference to the cell
-            let cell = &mut self.terrain[x][y];
+            let white_dp = DrawParam::default().dest(ggez::mint::Point2 {
+                x: x as f32 * read_cell_size(),
+                y: y as f32 * read_cell_size(),
+            }).color(Color::WHITE);
 
             // Apply damage if the cell is not air
             if cell.material != Material::Air {
                 if ignore_durability {
+                    self.instances.update((x * read_terrain_height() + y) as u32, white_dp);
+
                     cell.material = Material::Air;
                     cell.durability = 0.0;
                 } else {
                     cell.durability -= amount;
                     if cell.durability <= 0.0 {
+
+                        self.instances.update((x * read_terrain_height() + y) as u32, white_dp);
+
                         cell.material = Material::Air;
                         cell.durability = 0.0;
                     }
@@ -401,8 +446,8 @@ impl MainState {
             let query_rect = ggez::graphics::Rect::new(
                 eff.position.0 - radius,
                 eff.position.1 - radius,
-                radius * 10.0,
-                radius * 10.0,
+                radius * 2.0,
+                radius * 2.0,
             );
             let candidates = self.terrain_quadtree.query(query_rect);
             for candidate in candidates {
@@ -416,8 +461,13 @@ impl MainState {
                         EffectType::Lightning => 10.0,
                     };
                     let ignore_durability = matches!(eff.effect_type, EffectType::Lightning);
+
+                    if self.terrain[candidate.tx][candidate.ty].material == Material::Air {
+                        continue;
+                    }
+
                     damage_requests.lock().unwrap().push((candidate.tx, candidate.ty, dmg, ignore_durability));
-                    
+
                     let cell = &self.terrain[candidate.tx][candidate.ty];
                     if cell.material != Material::Air {
                         let remaining = if ignore_durability { 0.0 } else { cell.durability - dmg };
@@ -606,44 +656,7 @@ impl EventHandler<GameError> for MainState {
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         let mut canvas = Canvas::from_frame(ctx, Color::WHITE);
 
-        // Create InstanceArrays for grass and rock
-        let mut grass_instances = InstanceArray::new(ctx, self.grass_image.clone());
-        let mut rock_instances = InstanceArray::new(ctx, self.rock_image.clone());
-
-        let cell_size = read_cell_size();
-        let terrain_width = read_terrain_width();
-        let terrain_height = read_terrain_height();
-        let terrain = &self.terrain;
-
-        let draw_commands: Vec<(Material, DrawParam)> = (0..terrain_width)
-            .into_par_iter()
-            .flat_map_iter(|x| {
-                (0..terrain_height).filter_map(move |y| {
-                    let cell = &terrain[x][y];
-                    let dest = ggez::mint::Point2 {
-                        x: x as f32 * cell_size,
-                        y: y as f32 * cell_size,
-                    };
-                    match cell.material {
-                        Material::Grass => Some((Material::Grass, DrawParam::default().dest(dest))),
-                        Material::Rock => Some((Material::Rock, DrawParam::default().dest(dest))),
-                        _ => None,
-                    }
-                })
-            })
-            .collect();
-
-        // Sequentially push parameters into instance arrays.
-        for (material, param) in draw_commands {
-            match material {
-                Material::Grass => grass_instances.push(param),
-                Material::Rock => rock_instances.push(param),
-                _ => {},
-            }
-        }
-
-        grass_instances.draw(&mut canvas, DrawParam::default());
-        rock_instances.draw(&mut canvas, DrawParam::default());
+        self.instances.draw(&mut canvas, DrawParam::default());
 
         if self.show_intro {
             let mut canvas = Canvas::from_frame(ctx, Color::WHITE); // White background

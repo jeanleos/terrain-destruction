@@ -72,7 +72,7 @@ The lightning strike is likewise based on complex mathematical notions which wou
 
 Besides, we would have wanted to explore more ways to optimise the project to create the preceding effects.
 
-Finally, this project can be easily modified, and new effects could be added.
+Finally, this project can be easily modified, and new effects could be added and new noises could be added as well.
 
 # Logs
 
@@ -130,7 +130,7 @@ We added terrain bouncing as our final functionality (listed as our goal). The m
 
 We added a new noise for generating terrain. To maintain a future-proof architecture, we moved the generation to a new structure named NoiseGenerator which includes Perlin, Simplex and Fbm.
 
-After testing on low-end devices, the project seems unoptimised with the latest modifications. Indeed, the new collision system requires more calculations for each bounce, therefore we used parallelism for effects with `rayon`.
+After testing on low-end devices, the project seems unoptimised with the latest modifications. Indeed, the new collision system requires more calculations for each bounce, therefore we used parallelism for effects with `rayon`. Likewise, we observed that Quadtree used a recursive version of for the `query` function, it is now iterative. Finally, an final observation for general optimisation is that our drawing function was ineffective due to its nature: it was filling each InstanceArray and drawing it afterwards. It is now cached and generated once in the terrain generation function and for each "deletion" of the terrain, we change the color to white.
 
 ## Authors
 
