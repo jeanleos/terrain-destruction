@@ -215,7 +215,6 @@ impl MainState {
             show_intro: true, // Start with the introduction screen
             grass_image: Image::from_color(ctx, read_cell_size() as u32, read_cell_size() as u32, Some(Color::from_rgb(111, 171, 51))),
             rock_image: Image::from_color(ctx, read_cell_size() as u32, read_cell_size() as u32, Some(Color::from_rgb(123, 108, 113))),
-            
             lightning_mesh: Mesh::new_rectangle(
                 ctx,
                 DrawMode::fill(),
@@ -402,8 +401,8 @@ impl MainState {
             let query_rect = ggez::graphics::Rect::new(
                 eff.position.0 - radius,
                 eff.position.1 - radius,
-                radius * 2.0,
-                radius * 2.0,
+                radius * 10.0,
+                radius * 10.0,
             );
             let candidates = self.terrain_quadtree.query(query_rect);
             for candidate in candidates {

@@ -78,7 +78,10 @@ pub struct QuadTreeNode {
 ///   Attempts to insert an item into the quadtree. If the item is outside the boundary,
 ///   it is ignored. If the node exceeds its capacity, it subdivides and delegates the
 ///   insertion to its child nodes. Returns `true` if the item was successfully inserted.
-///
+/// 
+/// - `collect_all(&self, found: &mut Vec<QuadTreeItem>)`:
+///   Recursively collects all items from this node and its children into the provided vector.
+/// 
 /// - `query(&self, range: &Rect, found: &mut Vec<QuadTreeItem>)`:
 ///   Finds all items within a given rectangular range. If the range does not intersect
 ///   the node's boundary, the method returns immediately. Otherwise, it checks the items
@@ -167,20 +170,53 @@ impl QuadTreeNode {
         false
     }
 
-    // Query the quadtree for items within a given range.
+    // Recursively collects all items from this node and its children.
+    fn collect_all(&self, found: &mut Vec<QuadTreeItem>) {
+        for item in &self.items {
+            found.push(item.clone());
+        }
+        if self.divided {
+            if let Some(ref ne) = self.northeast {
+                ne.collect_all(found);
+            }
+            if let Some(ref nw) = self.northwest {
+                nw.collect_all(found);
+            }
+            if let Some(ref se) = self.southeast {
+                se.collect_all(found);
+            }
+            if let Some(ref sw) = self.southwest {
+                sw.collect_all(found);
+            }
+        }
+    }
+
+    // Uses an iterative approach with early-exit when the query fully contains a node.
     pub fn query(&self, range: &Rect, found: &mut Vec<QuadTreeItem>) {
         let mut stack = Vec::new();
         stack.push(self);
 
         while let Some(node) = stack.pop() {
+            // If no part of the node intersects the query range, skip it.
             if !Self::intersects(&node.boundary, range) {
                 continue;
             }
+            // If the query range completely contains the node's boundary,
+            // add all items from this node and its children.
+            if range.x <= node.boundary.x &&
+               range.y <= node.boundary.y &&
+               range.x + range.w >= node.boundary.x + node.boundary.w &&
+               range.y + range.h >= node.boundary.y + node.boundary.h {
+                node.collect_all(found);
+                continue;
+            }
+            // Otherwise, check each item individually.
             for item in &node.items {
                 if Self::contains_point(range, item.x, item.y) {
                     found.push(item.clone());
                 }
             }
+            // Push children nodes (if any) onto the stack.
             if node.divided {
                 if let Some(ref ne) = node.northeast {
                     stack.push(ne);
