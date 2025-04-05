@@ -291,13 +291,13 @@ impl MainState {
                 let dp = DrawParam::default().dest(dest);
                 match mat {
                     Material::Grass => {
-                        self.instances.push(dp.clone().color(Color::from_rgb(111, 171, 51)));
+                        self.instances.push(dp.color(Color::from_rgb(111, 171, 51)));
                     }
                     Material::Rock => {
-                        self.instances.push(dp.clone().color(Color::from_rgb(123, 108, 113)));
+                        self.instances.push(dp.color(Color::from_rgb(123, 108, 113)));
                     }
                     _ => {
-                        self.instances.push(dp.clone().color(Color::from_rgb(255, 255, 255)));
+                        self.instances.push(dp.color(Color::from_rgb(255, 255, 255)));
                     }
                 }
             }
@@ -329,18 +329,16 @@ impl MainState {
         let should_play_sound = self.terrain[x][y].durability - amount <= 0.0;
 
         // Play sound if the cell is not air and the durability will be 0
-        if self.terrain[x][y].material != Material::Air && (should_play_sound || ignore_durability) {
-            if rand::rng().random_bool(0.10) {
-                if self.terrain[x][y].material == Material::Grass {
-                    self.play_sound("resources/sounds/grass.ogg", 0.2);
-                } else if self.terrain[x][y].material == Material::Rock {
-                    self.play_sound("resources/sounds/stone.ogg", 0.2);
-                }
+        if self.terrain[x][y].material != Material::Air && (should_play_sound || ignore_durability) && rand::rng().random_bool(0.10) {
+            if self.terrain[x][y].material == Material::Grass {
+                self.play_sound("resources/sounds/grass.ogg", 0.2);
+            } else if self.terrain[x][y].material == Material::Rock {
+                self.play_sound("resources/sounds/stone.ogg", 0.2);
             }
         }
 
         let cell = &mut self.terrain[x][y];
-        let old_type = cell.material.clone();
+        let old_type = cell.material;
         
         if x < read_terrain_width() && y < read_terrain_height() {
 
