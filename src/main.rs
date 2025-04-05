@@ -49,11 +49,19 @@ use crate::noisetypes::NoiseType;
 mod noisegenerator;
 use crate::noisegenerator::NoiseGenerator;
 
-// Constants
+// Minimum value for width
 const MIN_WIDTH: u32 = 500;
+
+// Minimum value for height
 const MIN_HEIGHT: u32 = 300;
+
+// Minimum value for delta time
 const MIN_DELTA: u32 = 15;
+
+// Minimum value for cell size
 const MIN_SIZE_CELL: f32 = 5.0;
+
+// Minimum value for the UI height
 const UI_HEIGHT: f32 = 50.0;
 
 /// A struct representing the command-line arguments for configuring the application.
@@ -105,28 +113,42 @@ lazy_static::lazy_static! {
     static ref NOISETYPE: RwLock<NoiseType> = RwLock::new(NoiseType::Perlin);
 }
 
-// Read constants
+// Function to read constants of screen size width
 pub fn read_screen_width() -> f32 {
     *SCREEN_WIDTH.read().unwrap()
 }
+
+// Function to read constants of screen size height
 pub fn read_screen_height() -> f32 {
     *SCREEN_HEIGHT.read().unwrap()
 }
+
+// Function to read constants of terrain size width
 pub fn read_terrain_width() -> usize {
     *TERRAIN_WIDTH.read().unwrap()
 }
+
+// Function to read constants of terrain size height
 pub fn read_terrain_height() -> usize {
     *TERRAIN_HEIGHT.read().unwrap()
 }
+
+// Function to read constants of fixed delta time
 pub fn read_delta() -> f32 {
     *FIXED_DELTA.read().unwrap()
 }
+
+// Function to read constants of cell size
 pub fn read_cell_size() -> f32 {
     *CELL_SIZE.read().unwrap()
 }
+
+// Function to read constants of seed
 pub fn read_seed() -> i64 {
     *SEED.read().unwrap()
 }
+
+// Function to read constants of noise type
 pub fn read_noisetype() -> NoiseType {
     *NOISETYPE.read().unwrap()
 }

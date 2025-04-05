@@ -134,7 +134,9 @@ After testing on low-end devices, the project seems unoptimised with the latest 
 
 Eventually, destroying cells has a 10% chance of playing a sound regarding its material.
 
-The final project works very smoothly in a 700x500 window for 4-cores machines, and seems to work very well for 1920x1080 for higher-end devices (8-cores).
+The final project works very smoothly in a 700x500 window for 4-cores machines, and seems to work very well for 1920x1080 for higher-end devices (8-cores). With further testing, a 1000x1000 window also works but may be slower.
+
+Documentation was also fixed.
 
 ## Authors
 

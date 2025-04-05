@@ -62,6 +62,7 @@ use crate::noisegenerator::NoiseGenerator;
 /// - `lightning_mesh`: A mesh representing the lightning effect.
 /// - `bubble_mesh`: A mesh representing the bubble effect.
 /// - `more_bubble_mesh`: A mesh representing the more bubbles effect.
+/// - `instances`: An instance array for rendering terrain and effects efficiently.
 ///
 /// # Methods
 /// - `new() -> GameResult<MainState>`

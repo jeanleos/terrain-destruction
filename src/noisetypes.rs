@@ -31,6 +31,8 @@ pub enum NoiseType {
 }
 
 impl fmt::Display for NoiseType {
+
+    /// Formats the `NoiseType` enum as a string.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             NoiseType::Perlin => write!(f, "Perlin"),
