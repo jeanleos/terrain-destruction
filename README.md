@@ -126,11 +126,15 @@ As a final optimisation, instead of putting multiple rectangle images in an Inst
 
 We added terrain bouncing as our final functionality (listed as our goal). The main difficulty in this situation was a double borrowing in the for loop and damage function call. We decided the manually damage the cell.
 
-# 05/04: Added Simplex, problems with optimisation
+# 05/04: Added Simplex, problems with optimisation, and sounds
 
 We added a new noise for generating terrain. To maintain a future-proof architecture, we moved the generation to a new structure named NoiseGenerator which includes Perlin, Simplex and Fbm.
 
 After testing on low-end devices, the project seems unoptimised with the latest modifications. Indeed, the new collision system requires more calculations for each bounce, therefore we used parallelism for effects with `rayon`. Likewise, we observed that Quadtree used a recursive version of for the `query` function, it is now iterative. Finally, an final observation for general optimisation is that our drawing function was ineffective due to its nature: it was filling each InstanceArray and drawing it afterwards. It is now cached and generated once in the terrain generation function and for each "deletion" of the terrain, we change the color to white.
+
+Eventually, destroying cells has a 10% chance of playing a sound regarding its material.
+
+The final project works very smoothly in a 700x500 window for 4-cores machines, and seems to work very well for 1920x1080 for higher-end devices (8-cores).
 
 ## Authors
 

@@ -329,7 +329,7 @@ impl MainState {
 
         // Play sound if the cell is not air and the durability will be 0
         if self.terrain[x][y].material != Material::Air && (should_play_sound || ignore_durability) {
-            if rand::rng().random_bool(0.25) {
+            if rand::rng().random_bool(0.10) {
                 if self.terrain[x][y].material == Material::Grass {
                     self.play_sound("resources/sounds/grass.ogg", 0.2);
                 } else if self.terrain[x][y].material == Material::Rock {
